@@ -79,6 +79,15 @@ export async function disconnectConnectorAction(connectorId: string) {
   return { success: true as const }
 }
 
+export async function updateConnectorAction(connectorId: string, config: Record<string, string>) {
+  const user = await requireAuth()
+  await db.update(connectors)
+    .set({ config: config as never, status: 'connected', enabled: true, updatedAt: new Date() })
+    .where(and(eq(connectors.id, connectorId), eq(connectors.userId, user.id)))
+  revalidatePath('/connectors')
+  return { success: true as const }
+}
+
 // ─── Settings ──────────────────────────────────────────────────────────────
 
 export async function getSettingsAction() {
