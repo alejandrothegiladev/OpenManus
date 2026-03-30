@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { Spinner } from '@/components/ui/primitives'
-import { StatusBadge } from './badge'
+import { StatusBadge } from '@/components/ui/badge'
 import { CheckCircle2, AlertCircle, Clock, Zap } from 'lucide-react'
 import type { Run } from '@/lib/db/schema'
 
@@ -17,7 +17,7 @@ export function RunExecution({ run, onStreamUpdate }: RunExecutionProps) {
   const [isStreaming, setIsStreaming] = useState(false)
 
   useEffect(() => {
-    if (run.status === 'running' || run.status === 'pending') {
+    if (run.status === 'running' || run.status === 'pending' || run.status === 'planning' || run.status === 'executing') {
       setIsStreaming(true)
 
       const eventSource = new EventSource(`/api/runs/${run.id}/stream`)
@@ -25,12 +25,25 @@ export function RunExecution({ run, onStreamUpdate }: RunExecutionProps) {
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
-          if (data.type === 'log') {
-            setLogs((prev) => [...prev, data.message])
-            onStreamUpdate?.(data.message)
-          } else if (data.type === 'complete') {
-            setIsStreaming(false)
-            eventSource.close()
+          
+          // Handle different event types from agent runner
+          if (data.type === 'step_log') {
+            setLogs((prev) => [...prev, data.chunk || ''])
+            onStreamUpdate?.(data.chunk || '')
+          } else if (data.type === 'step_start') {
+            setLogs((prev) => [...prev, `\n→ Starting step: ${data.title}`])
+          } else if (data.type === 'step_done') {
+            setLogs((prev) => [...prev, `✓ Completed step ${data.stepIndex}`])
+          } else if (data.type === 'step_error') {
+            setLogs((prev) => [...prev, `✗ Error in step ${data.stepIndex}: ${data.error}`])
+          } else if (data.type === 'status') {
+            if (data.status === 'completed') {
+              setIsStreaming(false)
+              eventSource.close()
+            }
+            setLogs((prev) => [...prev, `[${data.status}] ${data.summary || ''}`])
+          } else if (data.type === 'plan') {
+            setLogs((prev) => [...prev, `📋 Plan created with ${data.plan?.steps?.length || 0} steps`])
           }
         } catch (e) {
           console.error('Failed to parse stream data', e)

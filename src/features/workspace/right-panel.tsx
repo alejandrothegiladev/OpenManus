@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import useSWR from 'swr'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/badge'
 import { formatRelativeTime } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/primitives'
 import {
   ChevronRight, Activity, FileText, Image as ImageIcon,
-  Code2, Table2, Link2, BookOpen, Cpu
+  Code2, Table2, Link2, BookOpen, Cpu, Trash2
 } from 'lucide-react'
 import Link from 'next/link'
 import type { Run } from '@/lib/db/schema'
@@ -19,10 +20,27 @@ interface RightPanelProps {
 const tabs = ['Plan', 'Steps', 'Logs', 'Artifacts'] as const
 type Tab = typeof tabs[number]
 
+const fetcher = (url: string) => fetch(url).then(r => r.json())
+
 export function WorkspaceRightPanel({ activeRun }: RightPanelProps) {
   const [tab, setTab] = useState<Tab>('Plan')
+  
+  // Live poll for run updates when activeRun exists and is running
+  const { data: liveRun, isLoading } = useSWR(
+    activeRun && (activeRun.status === 'running' || activeRun.status === 'planning' || activeRun.status === 'executing')
+      ? `/api/runs/${activeRun.id}`
+      : null,
+    fetcher,
+    {
+      refreshInterval: activeRun?.status === 'running' ? 1000 : 5000,
+      revalidateOnFocus: false,
+    }
+  )
 
-  if (!activeRun) {
+  // Use live run if available, fallback to prop
+  const run = liveRun || activeRun
+
+  if (!run) {
     return (
       <aside className="hidden lg:flex flex-col w-72 border-l border-border bg-surface shrink-0">
         <div className="p-4 border-b border-border">
@@ -37,8 +55,9 @@ export function WorkspaceRightPanel({ activeRun }: RightPanelProps) {
     )
   }
 
-  const plan = activeRun.plan as { steps?: { index: number; title: string; description: string }[] } | null
-  const steps = (activeRun as Run & { steps?: { id: string; stepIndex: number; title: string; status: string; logLines?: string[] }[] }).steps ?? []
+  const plan = run.plan as { steps?: { index: number; title: string; description: string }[] } | null
+  const steps = (run as Run & { steps?: { id: string; stepIndex: number; title: string; status: string; logLines?: string[] }[] }).steps ?? []
+  const artifacts = (run as any).artifacts ?? []
 
   return (
     <aside className="hidden lg:flex flex-col w-72 border-l border-border bg-surface shrink-0 overflow-hidden">
@@ -46,9 +65,9 @@ export function WorkspaceRightPanel({ activeRun }: RightPanelProps) {
       <div className="flex flex-col gap-2 p-4 border-b border-border">
         <div className="flex items-center justify-between">
           <span className="font-mono text-xs text-text-tertiary uppercase tracking-wider">Execution</span>
-          <StatusBadge status={activeRun.status} />
+          <StatusBadge status={run.status} />
         </div>
-        <p className="text-xs text-text-secondary truncate">{activeRun.objective}</p>
+        <p className="text-xs text-text-secondary truncate">{run.objective}</p>
       </div>
 
       {/* Tabs */}
@@ -121,19 +140,43 @@ export function WorkspaceRightPanel({ activeRun }: RightPanelProps) {
         )}
 
         {tab === 'Artifacts' && (
-          <div className="p-4">
-            <EmptyState
-              icon={<FileText size={16} />}
-              title="No artifacts yet"
-              description="Generated outputs will appear here."
-            />
+          <div className="p-4 flex flex-col gap-2">
+            {artifacts.length > 0 ? (
+              artifacts.map((artifact: any) => (
+                <div
+                  key={artifact.id}
+                  className="flex items-center gap-2 p-3 bg-surface-elevated rounded border border-border hover:border-accent transition-colors"
+                >
+                  {artifact.type === 'code' && <Code2 size={13} className="text-text-tertiary shrink-0" />}
+                  {artifact.type === 'image' && <ImageIcon size={13} className="text-text-tertiary shrink-0" />}
+                  {artifact.type === 'document' && <FileText size={13} className="text-text-tertiary shrink-0" />}
+                  {artifact.type === 'table' && <Table2 size={13} className="text-text-tertiary shrink-0" />}
+                  {artifact.type === 'link' && <Link2 size={13} className="text-text-tertiary shrink-0" />}
+                  {!['code', 'image', 'document', 'table', 'link'].includes(artifact.type) && (
+                    <BookOpen size={13} className="text-text-tertiary shrink-0" />
+                  )}
+                  <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                    <Link href={`/artifacts/${artifact.id}`}>
+                      <p className="text-xs font-medium text-accent hover:underline truncate">{artifact.title}</p>
+                    </Link>
+                    <p className="text-xs text-text-tertiary">{formatRelativeTime(artifact.createdAt)}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <EmptyState
+                icon={<FileText size={16} />}
+                title="No artifacts yet"
+                description="Generated outputs will appear here."
+              />
+            )}
           </div>
         )}
       </div>
 
       {/* Link to full run */}
       <div className="p-3 border-t border-border">
-        <Link href={`/runs/${activeRun.id}`}>
+        <Link href={`/runs/${run.id}`}>
           <Button variant="ghost" size="xs" className="w-full justify-between">
             <span>Full run view</span>
             <ChevronRight size={12} />

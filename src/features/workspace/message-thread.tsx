@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import { cn } from '@/lib/utils'
-import { StatusBadge } from './badge'
+import { StatusBadge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/primitives'
 import { Copy, Check } from 'lucide-react'
 

@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
     const modelKey = model === 'llama-3.3-70b-versatile' ? 'executor' : 'planner'
     const result = streamAgentChat(clientMessages, modelKey)
-    return (await result).toUIMessageStreamResponse({
+    return result.toUIMessageStreamResponse({
       onFinish: async ({ text }) => {
         if (chatId && text) {
           await db.insert(messages).values({ chatId, role: 'assistant', content: text })

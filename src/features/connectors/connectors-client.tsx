@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Divider } from '@/components/ui/primitives'
 import { toggleConnectorAction, connectConnectorAction, disconnectConnectorAction } from '@/server/actions/connectors'
+import { ConnectorModal } from './connector-modal'
 import { formatRelativeTime } from '@/lib/utils'
 import {
   Globe, Github, FileText, Layers, Triangle, Database,
@@ -41,6 +42,8 @@ export function ConnectorsClient({ connectors }: ConnectorsClientProps) {
   const [localState, setLocalState] = useState<Record<string, boolean>>(
     Object.fromEntries(connectors.map((c) => [c.type, c.enabled]))
   )
+  const [selectedConnector, setSelectedConnector] = useState<ConnectorRow | null>(null)
+  const [showModal, setShowModal] = useState(false)
 
   const categories = ['development', 'productivity', 'data', 'browser'] as const
   const grouped = categories.map((cat) => ({
@@ -49,6 +52,13 @@ export function ConnectorsClient({ connectors }: ConnectorsClientProps) {
   }))
 
   function handleToggle(connector: ConnectorRow) {
+    // For API-key connectors that need setup, open modal
+    if (connector.authType === 'api_key' && !connector.id) {
+      setSelectedConnector(connector)
+      setShowModal(true)
+      return
+    }
+
     if (!connector.id) {
       startTransition(async () => {
         await connectConnectorAction(connector.type)
@@ -68,6 +78,17 @@ export function ConnectorsClient({ connectors }: ConnectorsClientProps) {
   }
 
   return (
+    <>
+      {showModal && selectedConnector && (
+        <ConnectorModal
+          connector={selectedConnector}
+          onClose={() => setShowModal(false)}
+          onConnect={() => {
+            setShowModal(false)
+            setLocalState((s) => ({ ...s, [selectedConnector.type]: true }))
+          }}
+        />
+      )}
     <div className="flex flex-col gap-10">
       {grouped.map(({ label, items }) => (
         <section key={label}>
@@ -120,6 +141,6 @@ export function ConnectorsClient({ connectors }: ConnectorsClientProps) {
           </div>
         </section>
       ))}
-    </div>
+    </>
   )
 }
